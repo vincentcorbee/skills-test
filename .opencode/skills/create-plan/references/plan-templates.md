@@ -10,8 +10,10 @@ Task structure: [why these task boundaries are appropriate and why any horizonta
 ### T1: [descriptive name]
 - **Vertical slice:** [observable behavior or independently usable capability delivered across all required layers]
 - **Test boundary:** [specific tests that verify this slice end to end where practical]
+- **Criteria covered:** [product acceptance criteria and design success criteria]
 - **Dependencies:** none | T1, T2, ...
 - **Key files:** [files created or modified in this task]
+- **Prior art:** [analogous implementation and tests, or none]
 
 #### Todos
 
@@ -28,5 +30,7 @@ Task structure: [why these task boundaries are appropriate and why any horizonta
 **Date:** YYYY-MM-DD
 **Type:** plan
 **Status:** active
-**Related:** [link to design document]
+**Work type:** bug | task | small
+**Tracker:** [tracker reference, if it exists]
+**Related:** [link to spec] | [link to design document]
 ```

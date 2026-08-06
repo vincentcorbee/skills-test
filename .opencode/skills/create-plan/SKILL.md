@@ -1,6 +1,6 @@
 ---
 name: create-plan
-description: Takes a design document, turns it into an implementable tasks Use when the user says "create a implementation plan" or when referenced by other skills.
+description: Turn an approved technical design into executable implementation tasks and verification steps. Use when the user says "create an implementation plan" or when referenced by other skills.
 user-invocable: true
 ---
 
@@ -9,6 +9,8 @@ user-invocable: true
 From user or calling skill:
 
 - **design_path** (string, required) -- path to design document.
+- **tracker_ref** (string, optional) -- tracker reference to update; otherwise obtain it from the linked spec
+- **work_type** (string, optional) -- `bug`, `task`, or `small`; must match the design when provided
 - **max_review_rounds** (integer, optional, default: 3)
 - **auto_approve_plan** (boolean, optional, default: false)
 
@@ -16,7 +18,9 @@ From user or calling skill:
 
 ### Phase 1: Read design document
 
-Read the design document at `design_path`. Extract approach, constraints, risks, and success criteria.
+Read the design document at `design_path`. Require metadata status `approved`. Extract its work type, chosen approach, technical constraints, risks, success criteria, verification boundaries, delivery phases, repository prior art, linked product spec, and tracker reference. Treat the design as solution truth and its linked spec as product truth. Use the design's work type for review; if the optional input conflicts, stop and report the mismatch.
+
+Read `docs/agents/domain.md` when present and preserve its vocabulary. Read `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md` before any publication or readiness operation.
 
 ### Phase 2: Create plan
 
@@ -36,6 +40,8 @@ For each task, identify:
 - Its concrete test boundary
 - Its dependencies
 - Its key files
+- Relevant implementation and test prior art
+- The product acceptance criteria and design criteria it verifies
 - Its implementation todos
 
 Write one line explaining why the chosen task boundaries are appropriate.
@@ -44,23 +50,28 @@ Write one line explaining why the chosen task boundaries are appropriate.
 
 Use the [task plan template](references/plan-templates.md#task-plan).
 
+Save the active draft to `docs/plans/YYYY-MM-DD-<topic>.md` using the [metadata header template](references/plan-templates.md#metadata-header) so review has a stable `plan_path`.
+
 Ensure the plan:
 
 - Maps every design risk to the task or todo that mitigates it
 - Covers every success criterion from the design document
+- Traces product acceptance criteria through the design to an implementation task and verification step
 - Does not repeat the design document's "Decisions and tradeoffs" section; the `Related` header links to that context
+- Does not invent product behavior or reopen technical decisions; report gaps to the owning spec or design instead
+- Points to analogous implementation and test patterns where they reduce ambiguity
 
 ### Phase 3: Review
 
 Use /review-plan with:
 
 - **plan_path** -- the plan file
-- **work_type** -- passed through
+- **work_type** -- from the design
 - **requirements_summary** -- one paragraph restating goal and constraints
-- **design_path** -- optional context so reviewers can see design decisions and rejected alternatives
+- **design_path** -- approved design and rejected alternatives
 - **max_review_rounds** -- passed through
 
-Handle scope escalation: if review-plan returns `scope_escalation`, present to user -- proceed with expanded scope or defer.
+If review returns `revision_required`, apply only corrections consistent with the spec and design, then rerun review up to `max_review_rounds`. If it returns `scope_escalation`, present the owning artifact and decision to the user. If it returns `review_exhausted`, stop; do not approve or publish.
 
 ### Phase 4: Present to user
 
@@ -68,13 +79,26 @@ If `auto_approve_plan` is true, present summary but proceed immediately.
 Else show final plan with review summary, wait for confirmation.
 
 ### Output
-Save the plan to `docs/plans/YYYY-MM-DD-<topic>.md` using the [metadata header template](references/plan-templates.md#metadata-header).
+After approval, set plan metadata status to `approved`. Only an approved plan may proceed to publication and readiness.
 
-### Phase 5: Handoff
+### Phase 5: Publish And Mark Ready
+
+After approval under phase 4, update the configured tracker item's managed delivery section with links or identifiers for the approved spec, design, and plan plus a concise delivery summary. Preserve all content outside that section. If no `tracker_ref` exists, publish the item using the linked spec and retain the returned reference. `auto_approve_plan: true` counts as explicit programmatic approval.
+
+Store a newly created tracker reference in the approved plan metadata before returning.
+
+Resolve readiness roles through `docs/agents/triage-labels.md`. If the tracker item has the mapped `wontfix` value, stop and ask the user to reopen it; do not silently override that decision. Otherwise remove any currently applied values mapped from `needs-triage`, `needs-info`, or `ready-for-human`, then apply the mapped `ready-for-agent` value using the exact operations in `docs/agents/issue-tracker.md`.
+
+If either configuration file is absent or incomplete, preserve the approved local plan, return `needs_setup`, and direct the user to /setup-skills. Do not guess tracker operations or report readiness as applied.
+
+### Phase 6: Handoff
 
 **When invoked directly by the user:** Offer to implement. If yes, use /develop with `confirmed_plan` to handle the rest. When called by another skill return and let the caller orchestrate.
 
 ## Returns
 
 - **confirmed_plan** (string) -- path to the confirmed plan file
+- **tracker_ref** (string, optional) -- updated tracker URL, identifier, or local feature directory
+- **readiness_applied** (boolean) -- whether the configured `ready-for-agent` value was successfully applied
+- **needs_setup** (boolean, optional) -- publication requires /setup-skills; the local plan remains approved
 - **review_summary** (string) -- summary of review rounds and outcome
